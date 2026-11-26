@@ -128,7 +128,7 @@ class OverlayRenderer:
         self.base = base
         cv = style["canvas"]
         self.W, self.H = cv["width"], cv["height"]
-        self.frame = self._frame_mask()
+        self.frame = self._frame_mask() if style["card"].get("enabled", True) else None
         cap = style["caption"]
         self.cap_font = ImageFont.truetype(resolve(cap["font"], base), cap["size"])
         self.cap_color = hex_rgb(cap["color"])
@@ -240,14 +240,128 @@ class OverlayRenderer:
         layer.alpha_composite(word, pos)
         return layer
 
+    # -- dynamic captions: bold pop-in, emphasis lines, moving word highlight --
+    def _dyn_fonts(self):
+        if not hasattr(self, "_dynf"):
+            cap = self.s["caption"]
+            self._dynf = (
+                ImageFont.truetype(resolve(cap["font"], self.base), cap["size"]),
+                ImageFont.truetype(resolve(cap.get("emphasis_font", cap["font"]), self.base),
+                                   cap.get("emphasis_size", cap["size"])))
+            self._dyn_layouts = {}
+        return self._dynf
+
+    def _dyn_layout(self, text):
+        """Return (block_w, block_h, [(x, y_baseline, word, font, emph)])."""
+        fonts = self._dyn_fonts()
+        if text in self._dyn_layouts:
+            return self._dyn_layouts[text]
+        cap = self.s["caption"]
+        toks = parse_tokens(text, cap.get("auto_emphasis", True))
+        if cap.get("uppercase"):
+            toks = [(w.upper(), e) for w, e in toks]
+        # emphasised words go on their own line; others are wrapped by width
+        groups, cur = [], []
+        for w, e in toks:
+            # start a new line whenever we switch between emphasised/normal words
+            if cur and cur[-1][1] != e:
+                groups.append(cur)
+                cur = []
+            cur.append((w, e))
+        if cur:
+            groups.append(cur)
+        maxw = cap["max_width"]
+        lines = []
+        for g in groups:
+            line, lw = [], 0
+            for w, e in g:
+                f = fonts[1] if e else fonts[0]
+                ww = f.getlength(w)
+                sp = f.getlength(" ") + cap.get("word_gap", 0) if line else 0
+                if line and lw + sp + ww > maxw:
+                    lines.append(line)
+                    line, lw, sp = [], 0, 0
+                line.append((w, f, e, ww))
+                lw += sp + ww
+            if line:
+                lines.append(line)
+        placed, y, block_w = [], 0, 0
+        gap = cap.get("line_gap", 10)
+        for line in lines:
+            asc = max(f.getmetrics()[0] for _, f, _, _ in line)
+            desc = max(f.getmetrics()[1] for _, f, _, _ in line)
+            widths = [ww for *_, ww in line]
+            extra = cap.get("word_gap", 0)  # room for the highlight box
+            spaces = [f.getlength(" ") + extra for _, f, _, _ in line[1:]]
+            lw = sum(widths) + sum(spaces)
+            block_w = max(block_w, lw)
+            x = -lw / 2
+            for i, (w, f, e, ww) in enumerate(line):
+                placed.append((x, y + asc, w, f, e))
+                x += ww + (f.getlength(" ") + extra if i + 1 < len(line) else 0)
+            y += asc + desc * 0.6 + gap
+        out = (block_w, y - gap, placed)
+        self._dyn_layouts[text] = out
+        return out
+
+    def dynamic_caption_layer(self, text, progress, y=None, shadow=0, active=-1):
+        cap = self.s["caption"]
+        bw, bh, placed = self._dyn_layout(text)
+        pad = 60
+        W, H = int(bw + pad * 2), int(bh + pad * 2)
+        img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx = W / 2
+        hl = hex_rgb(cap.get("highlight_color", "#FFD60A"))
+        hl_text = hex_rgb(cap.get("highlight_text_color", "#111111"))
+        emph_col = hex_rgb(cap.get("emphasis_color", cap["color"]))
+        base_col = hex_rgb(cap["color"])
+        for i, (x, yb, w, f, e) in enumerate(placed):
+            if i == active:
+                l, t, r, b = f.getbbox(w, anchor="ls")
+                px, py = cap.get("highlight_pad", [14, 8])
+                d.rounded_rectangle([cx + x + l - px, pad + yb + t - py, cx + x + r + px, pad + yb + b + py],
+                                    radius=cap.get("highlight_radius", 14), fill=hl + (255,))
+        text_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        td = ImageDraw.Draw(text_layer)
+        for i, (x, yb, w, f, e) in enumerate(placed):
+            col = hl_text if i == active else (emph_col if e else base_col)
+            td.text((cx + x, pad + yb), w, font=f, fill=col + (255,), anchor="ls")
+        sh = shadow or cap.get("shadow", 0)
+        if sh > 0:
+            glow = Image.alpha_composite(img, text_layer).getchannel("A").filter(ImageFilter.GaussianBlur(12))
+            glow = glow.point(lambda v: int(min(255, v * 2.2) * sh))
+            under = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            under.putalpha(glow)
+            img = Image.alpha_composite(under, img)
+        img.alpha_composite(text_layer)
+        # pop-in: scale up with a slight overshoot, fade in
+        if progress < 1:
+            p = progress
+            c1 = 1.70158
+            back = 1 + (c1 + 1) * (p - 1) ** 3 + c1 * (p - 1) ** 2
+            sc = cap.get("pop_from", 0.7) + (1 - cap.get("pop_from", 0.7)) * back
+            nw, nh = max(1, int(W * sc)), max(1, int(H * sc))
+            img = img.resize((nw, nh), Image.LANCZOS)
+            a = img.getchannel("A").point(lambda v: int(v * min(1, p * 2.2)))
+            img.putalpha(a)
+        layer = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+        cy = y or cap["center_y"]
+        layer.alpha_composite(img, (int(self.W / 2 - img.width / 2), int(cy - img.height / 2)))
+        return layer
+
     # -- compose --------------------------------------------------------------
     def compose(self, caption=None, accent=None):
         img = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
         if caption:
-            img.alpha_composite(self.caption_layer(*caption))
+            if self.s["caption"].get("mode") == "dynamic":
+                img.alpha_composite(self.dynamic_caption_layer(*caption))
+            else:
+                img.alpha_composite(self.caption_layer(*caption))
         if accent:
             img.alpha_composite(self.accent_layer(*accent))
-        img.alpha_composite(self.frame)
+        if self.frame is not None:
+            img.alpha_composite(self.frame)
         return img
 
 
@@ -279,6 +393,41 @@ def procedural_sky(w, h, seed=7):
     return out
 
 
+def parse_tokens(text, auto_emphasis=True):
+    """Split caption text into (word, emphasised) tokens.
+    *word* marks emphasis; with auto_emphasis, prices (words with a currency
+    sign) are emphasised too."""
+    toks = []
+    for w in text.split():
+        e = w.startswith("*") or w.endswith("*")
+        w = w.strip("*")
+        if auto_emphasis and re.search(r"[₹$€£]", w):
+            e = True
+        if w:
+            toks.append((w, e))
+    return toks
+
+
+def active_word(c, t):
+    """Index of the word being spoken at time t. Uses explicit "words" timings
+    ([start, end] per word) if present, else spreads the caption's duration
+    across words weighted by length."""
+    if c.get("words"):
+        for i, (a, b) in enumerate(c["words"]):
+            if a <= t < b:
+                return i
+        return -1
+    toks = parse_tokens(c["text"], False)
+    weights = [len(w) + 2 for w, _ in toks]
+    dur = c["end"] - c["start"]
+    acc = c["start"]
+    for i, wt in enumerate(weights):
+        acc += dur * wt / sum(weights)
+        if t < acc:
+            return i
+    return len(toks) - 1
+
+
 # --------------------------------------------------------------------------- #
 # Timeline -> per-frame overlay state
 # --------------------------------------------------------------------------- #
@@ -291,8 +440,12 @@ def frame_state(t, captions, accents, style, fps):
         if c:
             n = max(1, round(style["caption"]["in_duration"] * fps))
             step = int((t - c["start"]) * fps + 1e-6) + 1
-            cap_key = (c["text"], 1.0 if step > n else (step - 0.5) / n,
-                       c.get("y"), c.get("shadow", 0))
+            prog = 1.0 if step > n else (step - 0.5) / n
+            if style["caption"].get("mode") == "dynamic":
+                cap_key = (c["text"], prog, c.get("y"), c.get("shadow", 0),
+                           active_word(c, t) if style["caption"].get("highlight", True) else -1)
+            else:
+                cap_key = (c["text"], prog, c.get("y"), c.get("shadow", 0))
     return cap_key, accent_key
 
 
@@ -401,6 +554,9 @@ def main():
         if style[sec].get(key):
             style[sec][key] = resolve(style[sec][key], style_base)
 
+    if not style["card"].get("enabled", True):  # full-frame: footage fills the canvas
+        style["card"].update(x=0, y=0, width=style["canvas"]["width"],
+                             height=style["canvas"]["height"], corner_radius=0)
     fps = project.get("fps", style["canvas"]["fps"])
     if not project.get("clips"):
         die("project has no clips")

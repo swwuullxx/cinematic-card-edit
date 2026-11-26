@@ -93,6 +93,14 @@ Each caption can also take `"y"` (vertical center in px, to dodge on-screen text
 
 Every number lives in [`presets/style.json`](presets/style.json): card size and radius, dim amount, fonts, caption size and position, blur-in time and strength, accent width and stretch. Edit a copy and pass it with `--style my_style.json`.
 
+## Dynamic variant (full-frame)
+
+`presets/style_dynamic.json` drops the card. It uses bold captions in the lower third that pop in with a slight overshoot. Prices (and any `*word*` you mark) get a bigger line of their own, and a yellow highlight box follows the spoken word. The highlight is timed by spreading each caption across its words. For exact timing, add `"words": [[start, end], ...]` to a caption.
+
+```bash
+python3 render.py my_video.json --style presets/style_dynamic.json -o my_video.mp4
+```
+
 ## Repo layout
 
 ```

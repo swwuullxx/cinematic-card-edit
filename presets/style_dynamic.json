@@ -1,0 +1,49 @@
+{
+  "_comment": "Full-frame variant: no card, bold pop-in captions in the lower third, emphasis lines for prices/key words, and a highlight box that follows the spoken word.",
+  "canvas": { "width": 1080, "height": 1920, "fps": 30, "background": "#000000" },
+
+  "card": { "enabled": false, "crop_y": 0.5 },
+
+  "grade": { "dim": 0.92, "contrast": 1.05, "saturation": 1.0 },
+
+  "caption": {
+    "mode": "dynamic",
+    "font": "fonts/InterDisplay-ExtraBold.otf",
+    "size": 72,
+    "emphasis_font": "fonts/InterDisplay-Black.otf",
+    "emphasis_size": 118,
+    "emphasis_color": "#FFFFFF",
+    "auto_emphasis": true,
+    "uppercase": false,
+    "color": "#FFFFFF",
+    "center_y": 1400,
+    "max_width": 900,
+    "line_gap": 6,
+    "word_gap": 18,
+    "max_words": 4,
+    "in_duration": 0.2,
+    "in_blur": 0,
+    "pop_from": 0.7,
+    "highlight": true,
+    "highlight_color": "#FFD60A",
+    "highlight_text_color": "#111111",
+    "highlight_pad": [14, 6],
+    "highlight_radius": 14,
+    "shadow": 0.55,
+    "out": "cut"
+  },
+
+  "accent": {
+    "font": "fonts/Anton-Regular.ttf",
+    "uppercase": true,
+    "target_width": 560,
+    "stretch_y": 1.5,
+    "max_height": 360,
+    "center_y": 1380,
+    "texture": "textures/sky.png",
+    "shadow_opacity": 0.6,
+    "shadow_blur": 24,
+    "hide_captions": true,
+    "in": "cut"
+  }
+}
