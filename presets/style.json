@@ -7,7 +7,8 @@
     "height": 1330,
     "x": 20,
     "y": 265,
-    "corner_radius": 45
+    "corner_radius": 45,
+    "crop_y": 0.5
   },
 
   "grade": {
@@ -37,6 +38,8 @@
     "max_height": 400,
     "center_y": 960,
     "texture": "textures/sky.png",
+    "shadow_opacity": 0.55,
+    "shadow_blur": 24,
     "hide_captions": true,
     "in": "cut"
   },

@@ -165,17 +165,26 @@ class OverlayRenderer:
             lines.append(cur)
         return lines
 
-    def caption_layer(self, text, progress):
-        """progress 0..1 through the blur-in animation (1 = settled)."""
+    def caption_layer(self, text, progress, y=None, shadow=0):
+        """progress 0..1 through the blur-in animation (1 = settled).
+        y overrides the caption's vertical center; shadow (0..1) adds a soft
+        dark glow for busy backgrounds."""
         cap = self.s["caption"]
         layer = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
         d = ImageDraw.Draw(layer)
         lines = self._wrap(text)
         lh = cap["size"] * cap["line_spacing"]
-        y0 = cap["center_y"] - lh * (len(lines) - 1) / 2
+        y0 = (y or cap["center_y"]) - lh * (len(lines) - 1) / 2
         for i, line in enumerate(lines):
             d.text((self.W / 2, y0 + i * lh), line, font=self.cap_font,
                    fill=self.cap_color + (255,), anchor="mm")
+        if shadow > 0:
+            glow = layer.getchannel("A").filter(ImageFilter.GaussianBlur(10))
+            glow = glow.point(lambda v: int(min(255, v * 2.5) * shadow))
+            under = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+            under.putalpha(glow)
+            under.alpha_composite(layer)
+            layer = under
         e = ease_out_quad(progress)
         blur = cap["in_blur"] * (1 - e)
         if blur > 0.3:
@@ -196,8 +205,9 @@ class OverlayRenderer:
                 self._tex_cache[key] = procedural_sky(1024, 1024)
         return self._tex_cache[key]
 
-    def accent_layer(self, text, texture=None):
+    def accent_layer(self, text, texture=None, width=None):
         ac = self.s["accent"]
+        target_w = width or ac["target_width"]
         if ac.get("uppercase", True):
             text = text.upper()
         sy = ac.get("stretch_y", 1.0)  # vertical stretch = taller, more condensed look
@@ -205,7 +215,7 @@ class OverlayRenderer:
         size = 400
         f = ImageFont.truetype(self.accent_font_path, size)
         l, t, r, b = f.getbbox(text)
-        scale = min(ac["target_width"] / (r - l), ac["max_height"] / ((b - t) * sy))
+        scale = min(target_w / (r - l), ac["max_height"] / ((b - t) * sy))
         f = ImageFont.truetype(self.accent_font_path, max(10, int(size * scale)))
         l, t, r, b = f.getbbox(text)
         tw, th = r - l, b - t
@@ -218,7 +228,16 @@ class OverlayRenderer:
         word = tex.convert("RGBA")
         word.putalpha(mask)
         layer = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
-        layer.alpha_composite(word, (int(self.W / 2 - tw / 2), int(ac["center_y"] - th / 2)))
+        pos = (int(self.W / 2 - tw / 2), int(ac["center_y"] - th / 2))
+        shadow = ac.get("shadow_opacity", 0)
+        if shadow > 0:  # soft dark glow so pale textures stay readable on bright footage
+            sh = Image.new("L", (self.W, self.H), 0)
+            sh.paste(mask, pos)
+            sh = sh.filter(ImageFilter.GaussianBlur(ac.get("shadow_blur", 24)))
+            sh = sh.point(lambda v: int(min(255, v * 1.6) * shadow))
+            layer = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+            layer.putalpha(sh)
+        layer.alpha_composite(word, pos)
         return layer
 
     # -- compose --------------------------------------------------------------
@@ -265,14 +284,15 @@ def procedural_sky(w, h, seed=7):
 # --------------------------------------------------------------------------- #
 def frame_state(t, captions, accents, style, fps):
     acc = next((a for a in accents if a["start"] <= t < a["end"]), None)
-    accent_key = (acc["text"], acc.get("texture")) if acc else None
+    accent_key = (acc["text"], acc.get("texture"), acc.get("width")) if acc else None
     cap_key = None
     if not (acc and style["accent"].get("hide_captions", True)):
         c = next((c for c in captions if c["start"] <= t < c["end"]), None)
         if c:
             n = max(1, round(style["caption"]["in_duration"] * fps))
             step = int((t - c["start"]) * fps + 1e-6) + 1
-            cap_key = (c["text"], 1.0 if step > n else (step - 0.5) / n)
+            cap_key = (c["text"], 1.0 if step > n else (step - 0.5) / n,
+                       c.get("y"), c.get("shadow", 0))
     return cap_key, accent_key
 
 
@@ -294,7 +314,8 @@ def build_ffmpeg(project, style, base, out, fps, total, audio_mode):
     for i, c in enumerate(clips):
         fc.append(
             f"[{i}:v]scale={card['width']}:{card['height']}:force_original_aspect_ratio=increase,"
-            f"crop={card['width']}:{card['height']},setsar=1,fps={fps},"
+            f"crop={card['width']}:{card['height']}:(iw-ow)/2:(ih-oh)*{c.get('crop_y', card.get('crop_y', 0.5))},"
+            f"setsar=1,fps={fps},"
             f"trim=duration={c['duration']},setpts=PTS-STARTPTS,format=yuv420p[v{i}]")
     fc.append("".join(f"[v{i}]" for i in range(len(clips))) +
               f"concat=n={len(clips)}:v=1:a=0[cat]")
@@ -343,7 +364,7 @@ def render_still(project, style, base, t, out, captions, accents, fps):
         ["ffmpeg", "-y", "-v", "error", "-ss", str(clip.get("start", 0) + local),
          "-i", resolve(clip["file"], base), "-frames:v", "1", "-vf",
          f"scale={card['width']}:{card['height']}:force_original_aspect_ratio=increase,"
-         f"crop={card['width']}:{card['height']},eq=contrast={g['contrast']}:saturation={g['saturation']},"
+         f"crop={card['width']}:{card['height']}:(iw-ow)/2:(ih-oh)*{clip.get('crop_y', card.get('crop_y', 0.5))},eq=contrast={g['contrast']}:saturation={g['saturation']},"
          f"colorchannelmixer=rr={g['dim']}:gg={g['dim']}:bb={g['dim']}", tmp], check=True)
     ov = OverlayRenderer(style, base)
     img = Image.new("RGBA", (ov.W, ov.H), hex_rgb(style["canvas"]["background"]) + (255,))
@@ -396,7 +417,8 @@ def main():
 
     captions = parse_srt(args.srt) if args.srt else project.get("captions", [])
     max_words = style["caption"].get("max_words", 4)
-    captions = [piece for c in captions for piece in split_caption(c, max_words)]
+    if project.get("split_captions", True):
+        captions = [piece for c in captions for piece in split_caption(c, max_words)]
     accents = project.get("accents", [])
 
     if args.still is not None:

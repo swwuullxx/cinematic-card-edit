@@ -45,7 +45,7 @@ The demo generates placeholder clips and writes `examples/demo.mp4`.
 
 1. Copy `examples/demo.json` to `my_video.json`.
 2. List your clips **in timeline order**. `start` is the in-point inside the source file and `duration` is how long it stays on screen.
-3. Add captions with start/end times, or skip them and pass an SRT (CapCut auto-captions, Whisper and similar). Long SRT lines are split into chunks of 4 words or fewer automatically.
+3. Add captions with start/end times, or skip them and pass an SRT (CapCut auto-captions, Whisper and similar). Long lines are split into chunks of 4 words or fewer automatically. To chunk them yourself at natural phrase breaks (recommended for the final cut), add `"split_captions": false` to the project.
 4. Add one accent word.
 5. Set `"audio": "voiceover.mp3"` to use a separate voiceover. With `null`, the clips' own audio is used.
 
@@ -70,7 +70,7 @@ python3 render.py my_video.json --still 3.1 -o preview.png
   "fps": 30,
   "audio": "voiceover.mp3",
   "clips": [
-    { "file": "media/me_talking.mp4", "start": 12.0, "duration": 1.4 },
+    { "file": "media/me_talking.mp4", "start": 12.0, "duration": 1.4, "crop_y": 0.4 },
     { "file": "media/laptop.mp4",     "start": 0.0,  "duration": 1.0 }
   ],
   "captions": [
@@ -83,7 +83,11 @@ python3 render.py my_video.json --still 3.1 -o preview.png
 }
 ```
 
-`texture` is optional per accent. It defaults to `textures/sky.png`. Generate a fresh one with `python3 scripts/make_texture.py`, or use any photo (clouds, chrome, light leaks, fire, gold).
+`texture` and `width` (target width in px, default 500) are optional per accent. It defaults to `textures/sky.png`. Generate a fresh one with `python3 scripts/make_texture.py`, or use any photo (clouds, chrome, light leaks, fire, gold).
+
+Each caption can also take `"y"` (vertical center in px, to dodge on-screen text or logos) and `"shadow"` (0–1, soft dark glow for busy backgrounds).
+
+`crop_y` (optional, 0 = top … 1 = bottom, default 0.5) sets which part of a tall clip shows inside the card.
 
 ### Customising the style
 
