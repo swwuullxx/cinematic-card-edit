@@ -1,0 +1,7 @@
+examples/demo_media/
+examples/*.mp4
+examples/still_*.png
+out.mp4
+*.src.png
+__pycache__/
+.DS_Store

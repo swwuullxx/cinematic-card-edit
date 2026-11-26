@@ -1,0 +1,34 @@
+{
+  "_comment": "Timing mirrors the reference edit. clip.start = in-point inside the source file, duration = how long it stays on screen. Timeline order = array order.",
+  "fps": 30,
+  "audio": null,
+  "clips": [
+    { "file": "demo_media/speaker.mp4",       "start": 0.0, "duration": 1.40 },
+    { "file": "demo_media/broll_laptop.mp4",  "start": 0.0, "duration": 1.04 },
+    { "file": "demo_media/broll_loft.mp4",    "start": 0.0, "duration": 1.00 },
+    { "file": "demo_media/broll_teal.mp4",    "start": 0.0, "duration": 1.12 },
+    { "file": "demo_media/broll_snow.mp4",    "start": 0.0, "duration": 1.36 },
+    { "file": "demo_media/speaker.mp4",       "start": 1.4, "duration": 1.16 },
+    { "file": "demo_media/broll_closeup.mp4", "start": 0.0, "duration": 1.32 },
+    { "file": "demo_media/speaker.mp4",       "start": 0.0, "duration": 1.44 },
+    { "file": "demo_media/broll_suit.mp4",    "start": 0.0, "duration": 0.86 }
+  ],
+  "captions": [
+    { "text": "Listen",              "start": 0.00, "end": 0.70 },
+    { "text": "for now",             "start": 0.70, "end": 1.50 },
+    { "text": "Put your head",       "start": 1.50, "end": 2.30 },
+    { "text": "down and just",       "start": 2.30, "end": 2.96 },
+    { "text": "Ignore the noise.",   "start": 3.44, "end": 4.56 },
+    { "text": "Ignore",              "start": 4.56, "end": 5.00 },
+    { "text": "the distractions.",   "start": 5.00, "end": 5.92 },
+    { "text": "Prove to yourself",   "start": 5.92, "end": 7.08 },
+    { "text": "that you can",        "start": 7.08, "end": 7.40 },
+    { "text": "really do it.",       "start": 7.40, "end": 8.40 },
+    { "text": "And then go show",    "start": 8.40, "end": 9.00 },
+    { "text": "the rest of the",     "start": 9.00, "end": 9.50 },
+    { "text": "world that you did.", "start": 9.50, "end": 10.70 }
+  ],
+  "accents": [
+    { "text": "work", "start": 2.96, "end": 3.44 }
+  ]
+}

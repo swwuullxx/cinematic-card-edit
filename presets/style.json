@@ -1,0 +1,51 @@
+{
+  "_comment": "Cinematic Card style. All pixel values assume a 1080x1920 (9:16) canvas.",
+  "canvas": { "width": 1080, "height": 1920, "fps": 30, "background": "#000000" },
+
+  "card": {
+    "width": 1040,
+    "height": 1330,
+    "x": 20,
+    "y": 265,
+    "corner_radius": 45
+  },
+
+  "grade": {
+    "dim": 0.70,
+    "contrast": 1.08,
+    "saturation": 0.90
+  },
+
+  "caption": {
+    "font": "fonts/InterDisplay-Medium.otf",
+    "size": 62,
+    "color": "#FFFFFF",
+    "center_y": 1000,
+    "max_width": 900,
+    "line_spacing": 1.15,
+    "max_words": 4,
+    "in_duration": 0.14,
+    "in_blur": 18,
+    "out": "cut"
+  },
+
+  "accent": {
+    "font": "fonts/Anton-Regular.ttf",
+    "uppercase": true,
+    "target_width": 500,
+    "stretch_y": 1.7,
+    "max_height": 400,
+    "center_y": 960,
+    "texture": "textures/sky.png",
+    "hide_captions": true,
+    "in": "cut"
+  },
+
+  "cutting": {
+    "avg_shot_seconds": 1.1,
+    "min_shot_seconds": 0.5,
+    "max_shot_seconds": 1.5,
+    "transitions": "none (hard cuts only)",
+    "return_to_speaker_every_n_broll": 3
+  }
+}
